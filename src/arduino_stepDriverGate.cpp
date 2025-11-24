@@ -11,12 +11,26 @@ auto Arduino_StepDriverGate::run() -> void
         pinMode(mDirPin, OUTPUT);
         pinMode(mEnablePin, OUTPUT);
         init = true;
+
+        mCurrentStep = mMaxSteps; // start at max position for position init
     }
 
     // calculate target step from input voltage
     auto raw = analogRead(mAnalogPin);
     mVoltage = fmap(raw, 0.0f, 1023.0f, 0.0f, 5000.0f);
     mVoltageStepResolution = (mAnalogMax - mAnalogMin) / mMaxSteps;
+
+    // Force to 0 position at startup
+    if(mPositionInit)
+    {
+        mVoltage = 0.0f; // force to 0 position at startup
+
+        if(mCurrentStep <= 0)
+        {
+            mPositionInit = false; // position initialized
+        }
+    }
+
     mTargetStep = static_cast<uint16_t>((mVoltage - mAnalogMin) / mVoltageStepResolution);
 
     if (mVoltage >= mAnalogMin && mVoltage <= mAnalogMax)
@@ -130,7 +144,6 @@ auto Arduino_StepDriverGate::createSignal(direction _dir) -> void
         if (mPauseWasActive)
         {
             timestampMicrosLow = timestamp;
-            
 
             switch (_dir)
             {

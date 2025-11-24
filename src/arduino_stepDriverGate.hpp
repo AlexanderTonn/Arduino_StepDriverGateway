@@ -2,6 +2,7 @@
 #define ARDUINO_STEPDRIVERGATE_HPP
 
 #include <Arduino.h>
+#include <EEPROM.h>
 
 class Arduino_StepDriverGate 
     {
@@ -29,6 +30,7 @@ class Arduino_StepDriverGate
         bool mPauseWasActive = false;
         bool mDirectionChanged = false; // used for direction change detection
         bool mPulseInverted = false;
+        bool mPositionInit = true; 
 
         uint32_t mPerfomanceStart;
         uint32_t mPerformanceEnd;
@@ -65,7 +67,9 @@ class Arduino_StepDriverGate
         auto setInvertPulse(const bool invertPulse) -> void {mPulseInverted = invertPulse;};
         auto setHighTime(const uint16_t highTime) -> void {mHighTime = highTime;};
         auto setLowTime(const uint16_t lowTime) -> void {mLowTime = lowTime;};
+
         auto getPerformance() -> uint32_t ;
+        auto getCurrentPosition() -> uint16_t {return mCurrentStep;};
 
         auto run() -> void;
         auto stop() -> void;
