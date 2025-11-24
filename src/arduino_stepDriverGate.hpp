@@ -2,7 +2,6 @@
 #define ARDUINO_STEPDRIVERGATE_HPP
 
 #include <Arduino.h>
-#include <EEPROM.h>
 
 class Arduino_StepDriverGate 
     {
