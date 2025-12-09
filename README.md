@@ -29,6 +29,7 @@ This class is used for a easy actuation of stepper motors with the help of an ad
 ## Use Case
 * you have a control task and not enough digital outputs available to realize a stepper actuation
 * you just want to actuate the stepper motor and you don't want to think about the pulse generation
+* you want to easily control a stepper motor by a pid regulator. In this case you can use to 0-5V as your controll variable
 
 # Example
 The example is using an Arduino UNO as the Gateway and an TB6600 but it's also work with other step motor drivers which use Enable, Direction and Pulse Pins.
