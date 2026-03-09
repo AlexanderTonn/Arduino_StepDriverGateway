@@ -6,7 +6,6 @@ auto Arduino_StepDriverGate::run() -> void
     static auto init = false;
     if (!init)
     {
-        pinMode(mAnalogPin, INPUT);
         pinMode(mStepPin, OUTPUT);
         pinMode(mDirPin, OUTPUT);
         pinMode(mEnablePin, OUTPUT);
