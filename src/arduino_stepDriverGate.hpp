@@ -80,6 +80,7 @@ class Arduino_StepDriverGate
 
         auto getPerformance() -> uint32_t ;
         auto getCurrentPosition() -> uint16_t {return mCurrentStep;};
+        auto getVoltage() -> float {return mVoltage;};
 
         auto run() -> void;
         auto stop() -> void;
