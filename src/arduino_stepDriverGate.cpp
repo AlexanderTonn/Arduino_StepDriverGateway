@@ -3,20 +3,36 @@
 auto Arduino_StepDriverGate::run() -> void
 {
     mPerfomanceStart = micros();
-    static auto init = false;
-    if (!init)
+    if (!mSysInitDone)
     {
         pinMode(mStepPin, OUTPUT);
         pinMode(mDirPin, OUTPUT);
         pinMode(mEnablePin, OUTPUT);
-        init = true;
+        mSysInitDone = true;
 
         mCurrentStep = mMaxSteps; // start at max position for position init
     }
 
     // calculate target step from input voltage
-    auto raw = analogRead(mAnalogPin);
-    mVoltage = fmap(raw, 0.0f, 1023.0f, 0.0f, 5000.0f);
+    if(mAvgIndex < ((sizeof(mAvgSamples)/2)-1))
+    {
+        mAvgSamples[mAvgIndex++] = analogRead(mAnalogPin);
+    }
+    else
+    {
+        mAvgIndex = 0;
+        auto raw = 0; 
+        // Create Average
+        for(byte i = 0; i < (sizeof(mAvgSamples)/2)-1; i++)
+        {
+            raw += mAvgSamples[i];
+        }
+        auto avg = raw / (sizeof(mAvgSamples)/2);
+
+        mVoltage = fmap(avg, mADCMin, mADCMax, mAnalogMin, mAnalogMax);
+    }
+
+    
     mVoltageStepResolution = (mAnalogMax - mAnalogMin) / mMaxSteps;
 
     // Force to 0 position at startup
@@ -49,10 +65,7 @@ auto Arduino_StepDriverGate::run() -> void
  */
 auto Arduino_StepDriverGate::setFrequency(uint16_t frequency) -> void
 {
-    if (frequency < 1)
-        mFrequency = 1;
-
-    mFrequency = frequency;
+    mFrequency = (frequency < 1) ? 1 : frequency;
 }
 
 
@@ -78,13 +91,10 @@ auto Arduino_StepDriverGate::handle(const uint16_t _targetStep) -> void
 auto Arduino_StepDriverGate::createSignal(direction _dir) -> void
 {
     auto timestamp = micros();
-    static auto timestampMicrosStepPulse = timestamp;
-    static auto timestampMicrosHigh = timestamp;
-    static auto timestampMicrosLow = timestamp;
     auto period = 1000000 / mFrequency; // in microseconds
 
     // Trigger step
-    mPauseWasActive = timestamp >= timestampMicrosLow + mLowTime;
+    mPauseWasActive = timestamp >= mTimestampMicrosLow + mLowTime;
 
 
     // If drirection changed, set a pause for stabilization
@@ -93,9 +103,9 @@ auto Arduino_StepDriverGate::createSignal(direction _dir) -> void
     {
         mPulseStepState = PulseStep::ACTIVE;
         mDirectionChanged = directionNow;
-        timestampMicrosLow = timestamp;
-        timestampMicrosStepPulse = timestamp;
-        timestampMicrosHigh = timestamp;
+        mTimestampMicrosLow = timestamp;
+        mTimestampMicrosStepPulse = timestamp;
+        mTimestampMicrosHigh = timestamp;
     }
 
     switch (_dir)
@@ -112,12 +122,12 @@ auto Arduino_StepDriverGate::createSignal(direction _dir) -> void
     {
     case PulseStep::ACTIVE:
 
-        mPulseSignalActive = timestamp >= timestampMicrosStepPulse + period;
+        mPulseSignalActive = timestamp >= mTimestampMicrosStepPulse + period;
 
         if (mPulseSignalActive)
         {
-            timestampMicrosStepPulse = timestamp;
-            timestampMicrosLow = timestamp;
+            mTimestampMicrosStepPulse = timestamp;
+            mTimestampMicrosLow = timestamp;
 
             mOut.Sig = true;
             mPulseStepState = PulseStep::INACTIVE;
@@ -126,13 +136,13 @@ auto Arduino_StepDriverGate::createSignal(direction _dir) -> void
 
     case PulseStep::INACTIVE:
 
-        mPulseSignalInactive = timestamp >= timestampMicrosHigh + mHighTime;
+        mPulseSignalInactive = timestamp >= mTimestampMicrosHigh + mHighTime;
 
         if (mPulseSignalInactive)
         {
 
-            timestampMicrosStepPulse = timestamp;
-            timestampMicrosHigh = timestamp;
+            mTimestampMicrosStepPulse = timestamp;
+            mTimestampMicrosHigh = timestamp;
 
             mOut.Sig = false;
 
@@ -142,16 +152,17 @@ auto Arduino_StepDriverGate::createSignal(direction _dir) -> void
     case PulseStep::PAUSE:
         if (mPauseWasActive)
         {
-            timestampMicrosLow = timestamp;
+            mTimestampMicrosLow = timestamp;
 
-            switch (_dir)
+            if(_dir == direction::NORMAL)
             {
-            case direction::NORMAL:
-                mCurrentStep++;
-                break;
-            case direction::INVERTED:
-                mCurrentStep--;
-                break;
+               if(mCurrentStep < mMaxSteps)
+                    mCurrentStep++;
+            }
+            else
+            {
+                if(mCurrentStep > 0)
+                    mCurrentStep--;
             }
 
             mPulseStepState = PulseStep::ACTIVE;
