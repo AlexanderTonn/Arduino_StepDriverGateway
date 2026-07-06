@@ -17,6 +17,7 @@ class Arduino_StepDriverGate
 
         uint16_t mCurrentStep = 0; // Current Step Position
         uint16_t mTargetStep = 0; // Target Step Position
+        uint16_t mSoftwareInput = 0; // Manual Step Input by public software input
         uint16_t mFrequency = 50; //Hz
         uint16_t mHighTime = 20; //micro seconds
         uint16_t mLowTime = 20; //micro seconds
@@ -55,10 +56,12 @@ class Arduino_StepDriverGate
         Arduino_StepDriverGate(byte analogPin, byte stepPin, byte dirPin, byte enPin, uint16_t maxSteps) 
         : mAnalogPin(analogPin), mStepPin(stepPin), mDirPin(dirPin), mEnablePin(enPin), mMaxSteps(maxSteps) {}
 
+        #define NO_ANALOG_PIN 255 // Define a constant for no analog pin
+
         enum class direction
         {
             NORMAL,
-            INVERTED
+            INVERTED,
         };
         enum class PulseStep
         {
@@ -77,6 +80,7 @@ class Arduino_StepDriverGate
         auto setLowTime(const uint16_t lowTime) -> void {mLowTime = lowTime;};
         auto setADC_min(const uint16_t adcMin) -> void {mADCMin = adcMin;};
         auto setADC_max(const uint16_t adcMax) -> void {mADCMax = adcMax;};
+        auto setTargetManual(const uint16_t input) -> void {mSoftwareInput = input;};
 
         auto getPerformance() -> uint32_t ;
         auto getCurrentPosition() -> uint16_t {return mCurrentStep;};

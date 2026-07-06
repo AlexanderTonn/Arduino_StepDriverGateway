@@ -14,33 +14,39 @@ auto Arduino_StepDriverGate::run() -> void
     }
 
     // calculate target step from input voltage
-    if(mAvgIndex < ((sizeof(mAvgSamples)/2)-1))
+    if (mAnalogPin != NO_ANALOG_PIN)
     {
-        mAvgSamples[mAvgIndex++] = analogRead(mAnalogPin);
+        if (mAvgIndex < ((sizeof(mAvgSamples) / 2) - 1))
+        {
+            mAvgSamples[mAvgIndex++] = analogRead(mAnalogPin);
+        }
+        else
+        {
+            mAvgIndex = 0;
+            auto raw = 0;
+            // Create Average
+            for (byte i = 0; i < (sizeof(mAvgSamples) / 2) - 1; i++)
+            {
+                raw += mAvgSamples[i];
+            }
+            auto avg = raw / (sizeof(mAvgSamples) / 2);
+
+            mVoltage = fmap(avg, mADCMin, mADCMax, mAnalogMin, mAnalogMax);
+        }
     }
     else
     {
-        mAvgIndex = 0;
-        auto raw = 0; 
-        // Create Average
-        for(byte i = 0; i < (sizeof(mAvgSamples)/2)-1; i++)
-        {
-            raw += mAvgSamples[i];
-        }
-        auto avg = raw / (sizeof(mAvgSamples)/2);
-
-        mVoltage = fmap(avg, mADCMin, mADCMax, mAnalogMin, mAnalogMax);
+        mVoltage = fmap(mSoftwareInput, mADCMin, mADCMax, mAnalogMin, mAnalogMax);
     }
 
-    
     mVoltageStepResolution = (mAnalogMax - mAnalogMin) / mMaxSteps;
 
     // Force to 0 position at startup
-    if(mPositionInit)
+    if (mPositionInit)
     {
         mVoltage = 0.0f; // force to 0 position at startup
 
-        if(mCurrentStep <= 0)
+        if (mCurrentStep <= 0)
         {
             mPositionInit = false; // position initialized
         }
@@ -51,7 +57,8 @@ auto Arduino_StepDriverGate::run() -> void
     if (mVoltage >= mAnalogMin && mVoltage <= mAnalogMax)
     {
         handle(mTargetStep);
-    }else 
+    }
+    else
     {
         handle(0);
     }
@@ -60,14 +67,13 @@ auto Arduino_StepDriverGate::run() -> void
 
 /**
  * @brief public method to set the stepper motor frequency for the step pulse (Hz)
- * 
+ *
  * @param frequency - Hz - see datasheet of stepper motor
  */
 auto Arduino_StepDriverGate::setFrequency(uint16_t frequency) -> void
 {
     mFrequency = (frequency < 1) ? 1 : frequency;
 }
-
 
 /**
  * @brief create a step pulse for the stepper motor
@@ -80,22 +86,20 @@ auto Arduino_StepDriverGate::handle(const uint16_t _targetStep) -> void
     {
         createSignal(direction::NORMAL);
     }
-    else if ( (mCurrentStep > _targetStep) )
+    else if ((mCurrentStep > _targetStep))
     {
         createSignal(direction::INVERTED);
     }
 
     setOutputs();
-
 }
 auto Arduino_StepDriverGate::createSignal(direction _dir) -> void
 {
     auto timestamp = micros();
-    auto period = 1000000 / mFrequency; // in microseconds
+    auto period = 1000000UL / mFrequency; // in microseconds
 
     // Trigger step
     mPauseWasActive = timestamp >= mTimestampMicrosLow + mLowTime;
-
 
     // If drirection changed, set a pause for stabilization
     bool directionNow = (_dir == direction::INVERTED) ? true : false;
@@ -154,14 +158,14 @@ auto Arduino_StepDriverGate::createSignal(direction _dir) -> void
         {
             mTimestampMicrosLow = timestamp;
 
-            if(_dir == direction::NORMAL)
+            if (_dir == direction::NORMAL)
             {
-               if(mCurrentStep < mMaxSteps)
+                if (mCurrentStep < mMaxSteps)
                     mCurrentStep++;
             }
             else
             {
-                if(mCurrentStep > 0)
+                if (mCurrentStep > 0)
                     mCurrentStep--;
             }
 
@@ -193,7 +197,7 @@ auto Arduino_StepDriverGate::setOutputs() -> void
  * @brief this is useful for checking the processing time in realtime applications
  * @return uint32_t - time in microseconds
  */
-auto Arduino_StepDriverGate::getPerformance() -> uint32_t 
+auto Arduino_StepDriverGate::getPerformance() -> uint32_t
 {
     return mPerformanceEnd - mPerfomanceStart;
 }
