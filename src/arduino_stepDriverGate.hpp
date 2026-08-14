@@ -12,6 +12,7 @@ class Arduino_StepDriverGate
         byte mDirPin;
         byte mEnablePin;
         uint16_t mMaxSteps = 200; // Steps per Revolution
+
         int16_t mAvgSamples[20] = {0}; // for averaging the analog input
         byte mAvgIndex = 0;
 
@@ -53,16 +54,19 @@ class Arduino_StepDriverGate
 
 
     public:
-        Arduino_StepDriverGate(byte analogPin, byte stepPin, byte dirPin, byte enPin, uint16_t maxSteps) 
-        : mAnalogPin(analogPin), mStepPin(stepPin), mDirPin(dirPin), mEnablePin(enPin), mMaxSteps(maxSteps) {}
-
-        #define NO_ANALOG_PIN 255 // Define a constant for no analog pin
-
         enum class direction
         {
             NORMAL,
             INVERTED,
         };
+        direction mInitDirection = direction::NORMAL;
+
+        Arduino_StepDriverGate(byte analogPin, byte stepPin, byte dirPin, byte enPin, uint16_t maxSteps, direction initDir = direction::NORMAL) 
+        : mAnalogPin(analogPin), mStepPin(stepPin), mDirPin(dirPin), mEnablePin(enPin), mMaxSteps(maxSteps), mInitDirection(initDir) {}
+
+        constexpr static byte NO_ANALOG_PIN = 255; // Define a constant for no analog pin
+
+        
         enum class PulseStep
         {
             ACTIVE,

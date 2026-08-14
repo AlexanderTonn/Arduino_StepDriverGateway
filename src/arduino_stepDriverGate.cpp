@@ -3,65 +3,137 @@
 auto Arduino_StepDriverGate::run() -> void
 {
     mPerfomanceStart = micros();
+
+    // ------------------------------------------------------------
+    // Hardware initialization
+    // ------------------------------------------------------------
     if (!mSysInitDone)
     {
         pinMode(mStepPin, OUTPUT);
         pinMode(mDirPin, OUTPUT);
         pinMode(mEnablePin, OUTPUT);
-        mSysInitDone = true;
 
-        mCurrentStep = mMaxSteps; // start at max position for position init
+        mCurrentStep = mMaxSteps; // Assume valve is at max position
+        mVoltage = mAnalogMin;
+
+        mSysInitDone = true;
     }
 
-    // calculate target step from input voltage
+    // ------------------------------------------------------------
+    // Determine input value
+    // ------------------------------------------------------------
     if (mAnalogPin != NO_ANALOG_PIN)
     {
-        if (mAvgIndex < ((sizeof(mAvgSamples) / 2) - 1))
-        {
-            mAvgSamples[mAvgIndex++] = analogRead(mAnalogPin);
-        }
-        else
+        constexpr size_t sampleCount =
+            sizeof(mAvgSamples) / sizeof(mAvgSamples[0]);
+
+        // Add new ADC sample
+        mAvgSamples[mAvgIndex++] = analogRead(mAnalogPin);
+
+        // Calculate average when buffer is full
+        if (mAvgIndex >= sampleCount)
         {
             mAvgIndex = 0;
-            auto raw = 0;
-            // Create Average
-            for (byte i = 0; i < (sizeof(mAvgSamples) / 2) - 1; i++)
+
+            uint32_t raw = 0;
+
+            for (size_t i = 0; i < sampleCount; ++i)
             {
                 raw += mAvgSamples[i];
             }
-            auto avg = raw / (sizeof(mAvgSamples) / 2);
 
-            mVoltage = fmap(avg, mADCMin, mADCMax, mAnalogMin, mAnalogMax);
+            const float avg =
+                static_cast<float>(raw) /
+                static_cast<float>(sampleCount);
+
+            // Convert ADC value into configured analog range
+            mVoltage = fmap(
+                avg,
+                mADCMin,
+                mADCMax,
+                mAnalogMin,
+                mAnalogMax);
         }
     }
     else
     {
-        mVoltage = fmap(mSoftwareInput, mADCMin, mADCMax, mAnalogMin, mAnalogMax);
+        // Software input already represents the configured
+        // engineering range, e.g. 0...100 %
+        mVoltage = static_cast<float>(mSoftwareInput);
     }
 
-    mVoltageStepResolution = (mAnalogMax - mAnalogMin) / mMaxSteps;
-
-    // Force to 0 position at startup
+    // ------------------------------------------------------------
+    // Position initialization
+    // ------------------------------------------------------------
     if (mPositionInit)
     {
-        mVoltage = 0.0f; // force to 0 position at startup
-
-        if (mCurrentStep <= 0)
+        // Force valve towards minimum position
+        switch (mInitDirection)
         {
-            mPositionInit = false; // position initialized
+        case direction::NORMAL:
+            mVoltage = mAnalogMin;
+
+            if (mCurrentStep == 0)
+            {
+                mPositionInit = false;
+            }
+            break;
+        case direction::INVERTED:
+            mVoltage = mAnalogMax;
+
+            if(mCurrentStep == mMaxSteps)
+            {
+                mPositionInit = false; 
+            }
+
+        default:
+            break;
         }
     }
 
-    mTargetStep = static_cast<uint16_t>((mVoltage - mAnalogMin) / mVoltageStepResolution);
-
-    if (mVoltage >= mAnalogMin && mVoltage <= mAnalogMax)
+    // ------------------------------------------------------------
+    // Limit input value
+    // ------------------------------------------------------------
+    if (mVoltage < mAnalogMin)
     {
-        handle(mTargetStep);
+        mVoltage = mAnalogMin;
+    }
+    else if (mVoltage > mAnalogMax)
+    {
+        mVoltage = mAnalogMax;
+    }
+
+    // ------------------------------------------------------------
+    // Calculate target position
+    // ------------------------------------------------------------
+    const float analogRange = mAnalogMax - mAnalogMin;
+
+    if ((analogRange > 0.0f) && (mMaxSteps > 0))
+    {
+        mVoltageStepResolution =
+            analogRange / static_cast<float>(mMaxSteps);
+
+        mTargetStep = static_cast<uint16_t>(
+            (mVoltage - mAnalogMin) /
+            mVoltageStepResolution);
+
+        // Protect against floating point rounding
+        if (mTargetStep > mMaxSteps)
+        {
+            mTargetStep = mMaxSteps;
+        }
     }
     else
     {
-        handle(0);
+        mVoltageStepResolution = 0.0f;
+        mTargetStep = 0;
     }
+
+    // ------------------------------------------------------------
+    // Move stepper towards target
+    // ------------------------------------------------------------
+    handle(mTargetStep);
+
     mPerformanceEnd = micros();
 }
 
@@ -95,83 +167,40 @@ auto Arduino_StepDriverGate::handle(const uint16_t _targetStep) -> void
 }
 auto Arduino_StepDriverGate::createSignal(direction _dir) -> void
 {
-    auto timestamp = micros();
-    auto period = 1000000UL / mFrequency; // in microseconds
+    const uint32_t now = micros();
+    const uint32_t period = 1000000UL / mFrequency;
 
-    // Trigger step
-    mPauseWasActive = timestamp >= mTimestampMicrosLow + mLowTime;
+    mOut.dir = (_dir == direction::INVERTED);
 
-    // If drirection changed, set a pause for stabilization
-    bool directionNow = (_dir == direction::INVERTED) ? true : false;
-    if (mDirectionChanged != directionNow)
+    if (mOut.Sig)
     {
-        mPulseStepState = PulseStep::ACTIVE;
-        mDirectionChanged = directionNow;
-        mTimestampMicrosLow = timestamp;
-        mTimestampMicrosStepPulse = timestamp;
-        mTimestampMicrosHigh = timestamp;
-    }
-
-    switch (_dir)
-    {
-    case direction::NORMAL:
-        mOut.dir = false; // CW
-        break;
-    case direction::INVERTED:
-        mOut.dir = true; // CCW
-        break;
-    }
-
-    switch (mPulseStepState)
-    {
-    case PulseStep::ACTIVE:
-
-        mPulseSignalActive = timestamp >= mTimestampMicrosStepPulse + period;
-
-        if (mPulseSignalActive)
+        // End HIGH pulse
+        if ((uint32_t)(now - mTimestampMicrosHigh) >= mHighTime)
         {
-            mTimestampMicrosStepPulse = timestamp;
-            mTimestampMicrosLow = timestamp;
+            mOut.Sig = false;
+        }
+    }
+    else
+    {
+        // Start next STEP
+        if ((uint32_t)(now - mTimestampMicrosStepPulse) >= period)
+        {
+            mTimestampMicrosStepPulse = now;
+            mTimestampMicrosHigh = now;
 
             mOut.Sig = true;
-            mPulseStepState = PulseStep::INACTIVE;
-        }
-        break;
-
-    case PulseStep::INACTIVE:
-
-        mPulseSignalInactive = timestamp >= mTimestampMicrosHigh + mHighTime;
-
-        if (mPulseSignalInactive)
-        {
-
-            mTimestampMicrosStepPulse = timestamp;
-            mTimestampMicrosHigh = timestamp;
-
-            mOut.Sig = false;
-
-            mPulseStepState = PulseStep::PAUSE;
-        }
-        break;
-    case PulseStep::PAUSE:
-        if (mPauseWasActive)
-        {
-            mTimestampMicrosLow = timestamp;
 
             if (_dir == direction::NORMAL)
             {
                 if (mCurrentStep < mMaxSteps)
-                    mCurrentStep++;
+                    ++mCurrentStep;
             }
             else
             {
                 if (mCurrentStep > 0)
-                    mCurrentStep--;
+                    --mCurrentStep;
             }
-
-            mPulseStepState = PulseStep::ACTIVE;
         }
-        break;
     }
 }
 
