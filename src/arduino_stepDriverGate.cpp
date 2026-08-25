@@ -13,8 +13,16 @@ auto Arduino_StepDriverGate::run() -> void
         pinMode(mDirPin, OUTPUT);
         pinMode(mEnablePin, OUTPUT);
 
-        mCurrentStep = mMaxSteps; // Assume valve is at max position
-        mVoltage = mAnalogMin;
+        if(mInitDirection == direction::NORMAL)
+        {
+            mCurrentStep = mMaxSteps; // Assume valve is at max position
+        }
+        if(mInitDirection == direction::INVERTED)
+        {
+            mCurrentStep = 0; // Assume valve is at min position
+        }
+
+        
 
         mSysInitDone = true;
     }

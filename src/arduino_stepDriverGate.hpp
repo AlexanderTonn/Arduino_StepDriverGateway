@@ -22,13 +22,13 @@ class Arduino_StepDriverGate
         uint16_t mFrequency = 50; //Hz
         uint16_t mHighTime = 20; //micro seconds
         uint16_t mLowTime = 20; //micro seconds
-        float mVoltage ;
-        float mVoltageStepResolution; // Steps derived from Voltage
+        float mVoltage = 0.0f ;
+        float mVoltageStepResolution = 0.0f; // Steps derived from Voltage
 
-        float mAnalogMin = 0.0; // Min Value in mV
-        float mAnalogMax = 5000.0; // Max Value  in mV
-        float mADCMin = 0.0;
-        float mADCMax = 1023.0;
+        float mAnalogMin = 0.0f; // Min Value in mV
+        float mAnalogMax = 5000.0f; // Max Value  in mV
+        float mADCMin = 0.0f;
+        float mADCMax = 1023.0f;
 
         bool mPulseSignalActive = false; 
         bool mPulseSignalInactive = false;
@@ -87,7 +87,7 @@ class Arduino_StepDriverGate
         auto setTargetManual(const uint16_t input) -> void {mSoftwareInput = input;};
 
         auto getPerformance() -> uint32_t ;
-        auto getCurrentPosition() -> uint16_t {return mCurrentStep;};
+        auto getCurrentPosition() -> uint16_t {return mCurrentStep;}; // Return the current Step Position (not percentage!)
         auto getVoltage() -> float {return mVoltage;};
 
         auto run() -> void;
